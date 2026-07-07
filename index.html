@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Field Well Markup</title>
+<style>
+  :root{
+    --ink:#0f172a; --surface:#f1f5f9; --panel:#ffffff; --line:#cbd5e1;
+    --muted:#64748b; --accent:#2563eb;
+    --verified:#15803d; --missing:#dc2626; --well:#64748b; --amber:#ca8a04;
+    --bar-h: 58px;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; height:100%; overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+    background:var(--surface); color:var(--ink);
+    -webkit-user-select:none; user-select:none; }
+
+  #app{ display:flex; flex-direction:column; height:100dvh; }
+
+  /* ── Top status bar ── */
+  #topbar{
+    height:var(--bar-h); flex:0 0 auto; background:var(--ink); color:#fff;
+    display:flex; align-items:center; gap:8px; padding:0 10px;
+    padding-top:env(safe-area-inset-top);
+  }
+  #topbar .title{ font-size:.82rem; font-weight:700; letter-spacing:.3px; white-space:nowrap; }
+  #topbar .active-tool{ font-size:.62rem; text-transform:uppercase; letter-spacing:.8px;
+    color:#93c5fd; background:rgba(255,255,255,.08); padding:3px 8px; border-radius:6px; }
+  #topbar .spacer{ flex:1; }
+  .tb-btn{ background:rgba(255,255,255,.10); border:none; color:#fff; width:40px; height:40px;
+    border-radius:9px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex:0 0 auto; }
+  .tb-btn:active{ background:rgba(255,255,255,.24); }
+  .tb-btn:disabled{ opacity:.32; }
+  .tb-btn svg{ width:20px; height:20px; }
+
+  /* ── Stage ── */
+  #stage-wrap{ position:relative; flex:1 1 auto; overflow:hidden; background:#e2e8f0; }
+  #stage{ width:100%; height:100%; display:block; touch-action:none; }
+  #placeholder{ position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:14px; color:var(--muted); padding:28px; text-align:center; }
+  #placeholder svg{ width:52px; height:52px; opacity:.4; }
+  #placeholder .big{ font-size:1rem; font-weight:700; color:#475569; }
+  #placeholder button{ margin-top:6px; }
+
+  /* hint chip */
+  #hint{ position:absolute; top:10px; left:50%; transform:translateX(-50%);
+    background:rgba(15,23,42,.92); color:#fff; font-size:.74rem; font-weight:600;
+    padding:8px 14px; border-radius:20px; pointer-events:none; opacity:0; transition:opacity .18s;
+    white-space:nowrap; z-index:30; box-shadow:0 4px 14px rgba(0,0,0,.25); }
+  #hint.show{ opacity:1; }
+
+  /* zoom cluster */
+  #zoom-cluster{ position:absolute; right:10px; bottom:12px; display:flex; flex-direction:column;
+    gap:6px; z-index:25; }
+  #zoom-cluster button{ width:44px; height:44px; border-radius:11px; border:1px solid var(--line);
+    background:var(--panel); color:var(--ink); font-size:1.3rem; font-weight:700; cursor:pointer;
+    box-shadow:0 2px 8px rgba(0,0,0,.12); display:flex; align-items:center; justify-content:center; }
+  #zoom-cluster button:active{ background:var(--surface); }
+  #zoom-cluster .fit{ font-size:.6rem; font-weight:800; letter-spacing:.5px; }
+
+  /* ── Bottom tool rail ── */
+  #rail{ flex:0 0 auto; background:var(--panel); border-top:1px solid var(--line);
+    display:flex; gap:6px; overflow-x:auto; overflow-y:hidden; padding:8px 8px calc(8px + env(safe-area-inset-bottom));
+    scrollbar-width:none; }
+  #rail::-webkit-scrollbar{ display:none; }
+  .tool{ flex:0 0 auto; width:62px; min-height:58px; border:1px solid var(--line); background:#fff;
+    border-radius:12px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:4px; cursor:pointer; color:var(--ink); }
+  .tool:active{ background:var(--surface); }
+  .tool.active{ border-color:var(--accent); background:#eff6ff; box-shadow:inset 0 0 0 1px var(--accent); }
+  .tool .glyph{ width:26px; height:26px; display:flex; align-items:center; justify-content:center; }
+  .tool .lbl{ font-size:.58rem; font-weight:700; text-transform:uppercase; letter-spacing:.3px; color:#475569; }
+  .tool.active .lbl{ color:var(--accent); }
+
+  /* ── Sheets / modals ── */
+  .backdrop{ position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:100;
+    display:none; align-items:flex-end; justify-content:center; }
+  .backdrop.open{ display:flex; }
+  .sheet{ width:100%; max-width:560px; background:var(--panel); border-radius:20px 20px 0 0;
+    padding:14px 16px calc(18px + env(safe-area-inset-bottom)); box-shadow:0 -8px 30px rgba(0,0,0,.25);
+    animation:slideUp .22s cubic-bezier(.2,.8,.2,1); max-height:82dvh; overflow-y:auto; }
+  @keyframes slideUp{ from{ transform:translateY(100%);} to{ transform:translateY(0);} }
+  .sheet h2{ margin:2px 0 12px; font-size:.72rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .sheet .grabber{ width:44px; height:5px; background:var(--line); border-radius:5px; margin:0 auto 12px; }
+  .menu-item{ display:flex; align-items:center; gap:12px; width:100%; text-align:left;
+    padding:14px 12px; border:none; background:transparent; border-radius:12px; font-size:.95rem;
+    font-weight:600; color:var(--ink); cursor:pointer; }
+  .menu-item:active{ background:var(--surface); }
+  .menu-item svg{ width:20px; height:20px; color:var(--muted); flex:0 0 auto; }
+  .menu-item.danger{ color:var(--missing); } .menu-item.danger svg{ color:var(--missing); }
+  .menu-sep{ height:1px; background:var(--line); margin:6px 4px; }
+
+  .size-row{ display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:8px 12px; }
+  .size-row > span{ font-size:.95rem; font-weight:600; color:var(--ink); }
+  .stepper{ display:flex; align-items:center; gap:2px; border:1px solid var(--line);
+    border-radius:12px; overflow:hidden; background:#fff; flex:0 0 auto; }
+  .stepper button{ width:44px; height:40px; border:none; background:#fff; font-size:1.4rem;
+    font-weight:700; color:var(--ink); cursor:pointer; line-height:1; }
+  .stepper button:active{ background:var(--surface); }
+  .stepper .val{ min-width:52px; text-align:center; font-size:.9rem; font-weight:700;
+    color:var(--muted); font-variant-numeric:tabular-nums; border-left:1px solid var(--line);
+    border-right:1px solid var(--line); height:40px; display:flex; align-items:center; justify-content:center; }
+  .size-preview{ display:flex; align-items:center; justify-content:center; gap:16px;
+    min-height:60px; padding:10px; margin:2px 12px 8px; background:var(--surface);
+    border:1px dashed var(--line); border-radius:12px; overflow:hidden; }
+  .size-preview svg{ flex:0 0 auto; }
+  .pdf-note{ margin:-4px 4px 12px; font-size:.82rem; color:var(--muted); }
+  .pdf-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+    gap:12px; }
+  .pdf-thumb{ display:flex; flex-direction:column; align-items:center; gap:6px; padding:8px;
+    border:1px solid var(--line); background:#fff; border-radius:12px; cursor:pointer; }
+  .pdf-thumb:active{ background:var(--surface); }
+  .pdf-thumb .frame{ width:100%; aspect-ratio:8.5/11; background:var(--surface);
+    border-radius:8px; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+  .pdf-thumb .frame img{ width:100%; height:100%; object-fit:contain; }
+  .pdf-thumb .frame .spin{ width:22px; height:22px; border:3px solid var(--line);
+    border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg);} }
+  .pdf-thumb .lbl{ font-size:.82rem; font-weight:700; color:var(--ink); }
+
+  .callout-opt{ display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+    padding:15px 14px; border:1px solid var(--line); background:#fff; border-radius:12px;
+    font-size:.95rem; font-weight:600; color:var(--ink); cursor:pointer; margin-bottom:8px; }
+  .callout-opt:active{ background:var(--surface); }
+  .callout-opt.custom{ border-style:dashed; color:var(--accent); }
+
+  /* text modal */
+  .modal-card{ width:100%; max-width:460px; background:var(--panel); border-radius:16px; margin:auto;
+    padding:18px; box-shadow:0 12px 40px rgba(0,0,0,.3); }
+  .backdrop.center{ align-items:center; padding:18px; }
+  .modal-card h3{ margin:0 0 12px; font-size:.95rem; }
+  .modal-card textarea{ width:100%; min-height:84px; border:1px solid var(--line); border-radius:10px;
+    padding:12px; font-size:1rem; font-family:inherit; resize:vertical; -webkit-user-select:text; user-select:text; }
+  .modal-actions{ display:flex; gap:10px; margin-top:14px; }
+
+  .btn{ flex:1; padding:13px; border-radius:11px; border:1px solid var(--line); background:#fff;
+    font-size:.9rem; font-weight:700; cursor:pointer; color:var(--ink); }
+  .btn:active{ background:var(--surface); }
+  .btn.primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.primary:active{ filter:brightness(.94); }
+  .btn.wide{ width:100%; margin-top:10px; }
+
+  #toast{ position:fixed; bottom:calc(var(--bar-h) + 20px); left:50%; transform:translateX(-50%);
+    background:var(--ink); color:#fff; padding:10px 16px; border-radius:22px; font-size:.8rem; font-weight:600;
+    z-index:200; opacity:0; transition:opacity .2s; pointer-events:none; }
+  #toast.show{ opacity:1; }
+
+  /* SVG item cursor affordance */
+  .item{ cursor:pointer; }
+  .handle{ cursor:pointer; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Top bar -->
+  <div id="topbar">
+    <button class="tb-btn" onclick="openMenu()" aria-label="Menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+    </button>
+    <div class="title">Field&nbsp;Markup</div>
+    <div class="active-tool" id="active-tool-badge">Move</div>
+    <div class="spacer"></div>
+    <button class="tb-btn" id="undo-btn" onclick="undo()" disabled aria-label="Undo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg>
+    </button>
+    <button class="tb-btn" id="redo-btn" onclick="redo()" disabled aria-label="Redo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h1"/></svg>
+    </button>
+  </div>
+
+  <!-- Stage -->
+  <div id="stage-wrap">
+    <svg id="stage" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+      <image id="baseImg" x="0" y="0" />
+      <g id="drawLayer"></g>
+      <g id="itemLayer"></g>
+      <g id="legendLayer"></g>
+      <g id="uiLayer"></g>
+    </svg>
+
+    <div id="placeholder">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 20 3 17V4l6 3 6-3 6 3v13l-6-3-6 3z"/><path d="M9 7v13M15 4v13"/></svg>
+      <div class="big">Load a site map to begin</div>
+      <div style="font-size:.8rem;max-width:260px;">Drop in an image (JPG/PNG) or a PDF of the well-location map.</div>
+      <button class="btn primary" style="max-width:220px" onclick="pickMap()">Load site map</button>
+    </div>
+
+    <div id="hint"></div>
+
+    <div id="zoom-cluster">
+      <button onclick="zoomStep(1.35)" aria-label="Zoom in">+</button>
+      <button onclick="zoomStep(1/1.35)" aria-label="Zoom out">&minus;</button>
+      <button class="fit" onclick="fitView()" aria-label="Fit">FIT</button>
+    </div>
+  </div>
+
+  <!-- Bottom tool rail -->
+  <div id="rail"></div>
+</div>
+
+<!-- Menu sheet -->
+<div class="backdrop" id="menu-backdrop" onclick="if(event.target===this)closeSheet('menu-backdrop')">
+  <div class="sheet">
+    <div class="grabber"></div>
+    <h2>Map &amp; project</h2>
+    <button class="menu-item" onclick="pickMap()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>Load site map (image / PDF)</button>
+    <button class="menu-item" id="legend-toggle-item" onclick="toggleLegend()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="14" x2="17" y2="14"/></svg><span id="legend-toggle-label">Show legend</span></button>
+    <div class="menu-sep"></div>
+    <h2>Marker &amp; label size</h2>
+    <div class="size-row">
+      <span>Markers &nbsp;✓ ✗ well</span>
+      <div class="stepper">
+        <button type="button" onclick="bumpIconSize(-1)" aria-label="Smaller markers">−</button>
+        <span class="val" id="icon-size-val">40%</span>
+        <button type="button" onclick="bumpIconSize(1)" aria-label="Larger markers">+</button>
+      </div>
+    </div>
+    <div class="size-preview" id="icon-size-preview"></div>
+    <div class="size-row">
+      <span>Text &amp; callouts</span>
+      <div class="stepper">
+        <button type="button" onclick="bumpLabelSize(-1)" aria-label="Smaller labels">−</button>
+        <span class="val" id="label-size-val">40%</span>
+        <button type="button" onclick="bumpLabelSize(1)" aria-label="Larger labels">+</button>
+      </div>
+    </div>
+    <div class="size-preview" id="label-size-preview"></div>
+    <div class="menu-sep"></div>
+    <h2>Export</h2>
+    <button class="menu-item" onclick="exportPNG()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Download marked-up image (PNG)</button>
+    <button class="menu-item" onclick="saveProject()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>Save project file (.json)</button>
+    <button class="menu-item" onclick="pickProject()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Open project file (.json)</button>
+    <div class="menu-sep"></div>
+    <button class="menu-item danger" onclick="confirmClear()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>Clear all markups</button>
+  </div>
+</div>
+
+<!-- Callout picker -->
+<div class="backdrop" id="callout-backdrop" onclick="if(event.target===this)closeSheet('callout-backdrop')">
+  <div class="sheet">
+    <div class="grabber"></div>
+    <h2>Callout text — then tap the map to place</h2>
+    <div id="callout-options"></div>
+  </div>
+</div>
+
+<!-- PDF page picker -->
+<div class="backdrop" id="pdf-backdrop" onclick="if(event.target===this)cancelPdfPick()">
+  <div class="sheet">
+    <div class="grabber"></div>
+    <h2 id="pdf-pick-title">Which page is the site map?</h2>
+    <p class="pdf-note">The selected page becomes the basemap. The rest of the PDF is discarded.</p>
+    <div id="pdf-page-grid" class="pdf-grid"></div>
+  </div>
+</div>
+
+<!-- Text modal -->
+<div class="backdrop center" id="text-backdrop">
+  <div class="modal-card">
+    <h3 id="text-modal-title">Enter text</h3>
+    <textarea id="text-modal-input" autocapitalize="sentences"></textarea>
+    <div class="modal-actions">
+      <button class="btn" onclick="resolveTextModal(null)">Cancel</button>
+      <button class="btn primary" onclick="resolveTextModal(document.getElementById('text-modal-input').value)">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm modal -->
+<div class="backdrop center" id="confirm-backdrop">
+  <div class="modal-card">
+    <h3 id="confirm-title">Are you sure?</h3>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeSheet('confirm-backdrop')">Cancel</button>
+      <button class="btn primary" id="confirm-ok" style="background:var(--missing);border-color:var(--missing)">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="map-input" accept="image/*,application/pdf" style="display:none">
+<input type="file" id="project-input" accept="application/json,.json" style="display:none">
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* ══════════════════════════════════════════════════════════════
+   FIELD WELL MARKUP  —  offline single-file field-inspection tool
+   Core (markup, pan/zoom, drawing, PNG export) uses NO libraries.
+   Only PDF *input* lazy-loads pdf.js (needs connectivity once).
+   ══════════════════════════════════════════════════════════════ */
+
+const SVGNS = 'http://www.w3.org/2000/svg';
+const PDF_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+const PDF_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const COLORS = { verified:'#15803d', missing:'#dc2626',
+                 well:'#dc2626', wellLine:'#991b1b',            // abandoned / destroyed = red
+                 wellBlue:'#2563eb', wellBlueLine:'#1e40af',    // unmapped = blue
+                 arrow:'#dc2626', draw:'#dc2626', calloutFill:'#fef9c3', calloutStroke:'#a16207',
+                 textFill:'#ffffff', textStroke:'#334155' };
+
+/* Callout preset labels — alphabetical, with Custom last */
+const CALLOUT_PRESETS = [
+  'Abandoned Well','Damaged Manhole Pad','Destroyed Well','Deteriorating Cap',
+  'Missing Cap','Missing Manhole Lid','Missing Well'
+];
+
+/* ── App state ──────────────────────────────────────────────── */
+const state = {
+  imageUri:null, imgW:0, imgH:0,
+  items:[],                 // every markup: icons, text, callouts, draw, arrow
+  legend:{ show:false, x:0, y:0,
+           lines:{ check:'Monitoring Well Present / Verified',
+                   x:'Missing Monitoring Well',
+                   well:'Abandoned / Destroyed Monitoring Well',
+                   wellblue:'Unmapped Monitoring Well' } },
+  nextId:1, U:60, STROKE:4, FS:26,
+  iconScale:0.4, labelScale:0.4     // markups start at 40% of base size
+};
+function iconU(){ return state.U * state.iconScale; }
+function labelFS(){ return state.FS * state.labelScale; }
+
+let tool = 'move';
+let selectedId = null;
+let pendingCalloutText = null;   // set when a callout preset is chosen
+
+const undoStack = [];
+const redoStack = [];
+
+/* Element refs */
+const stage    = document.getElementById('stage');
+const baseImg  = document.getElementById('baseImg');
+const drawLayer= document.getElementById('drawLayer');
+const itemLayer= document.getElementById('itemLayer');
+const legendLayer = document.getElementById('legendLayer');
+const uiLayer  = document.getElementById('uiLayer');
+
+/* viewBox we drive for pan/zoom */
+let vb = { x:0, y:0, w:1000, h:1000 };
+function applyVB(){ stage.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); positionUI(); }
+
+/* ── Tool rail definition ───────────────────────────────────── */
+const TOOLS = [
+  { id:'move',    label:'Move',    glyph:iconMove },
+  { id:'check',   label:'Verify',  glyph:()=>glyphSVG('check') },
+  { id:'x',       label:'Missing', glyph:()=>glyphSVG('x') },
+  { id:'well',    label:'Well',    glyph:()=>glyphSVG('well') },
+  { id:'wellblue',label:'Unmapped',glyph:()=>glyphSVG('wellblue') },
+  { id:'text',    label:'Text',    glyph:iconText },
+  { id:'callout', label:'Callout', glyph:iconCallout },
+  { id:'draw',    label:'Draw',    glyph:iconDraw },
+  { id:'arrow',   label:'Arrow',   glyph:iconArrow },
+  { id:'erase',   label:'Erase',   glyph:iconErase }
+];
+function buildRail(){
+  const rail = document.getElementById('rail');
+  rail.innerHTML = '';
+  TOOLS.forEach(t=>{
+    const b = document.createElement('button');
+    b.className = 'tool' + (t.id===tool?' active':'');
+    b.dataset.tool = t.id;
+    b.innerHTML = `<span class="glyph">${t.glyph()}</span><span class="lbl">${t.label}</span>`;
+    b.onclick = ()=> selectTool(t.id);
+    rail.appendChild(b);
+  });
+}
+function selectTool(id){
+  if(id==='callout'){ openCalloutPicker(); return; }
+  setTool(id);
+}
+function setTool(id){
+  tool = id;
+  document.querySelectorAll('.tool').forEach(el=>el.classList.toggle('active', el.dataset.tool===id));
+  const badge = { move:'Move', check:'Verify', x:'Missing', well:'Well', wellblue:'Unmapped', text:'Text',
+                  callout:'Callout', placeCallout:'Callout', draw:'Draw', arrow:'Arrow', erase:'Erase' }[id] || id;
+  document.getElementById('active-tool-badge').textContent = badge;
+  if(id!=='move'){ selectedId=null; renderUI(); }
+  const hints = {
+    check:'Tap to add a ✓ · drag an existing ✓ to move it',
+    x:'Tap to add a red X · drag an existing X to move it',
+    well:'Tap to add a red well (abandoned/destroyed) · drag to move it',
+    wellblue:'Tap to add a blue well (unmapped) · drag to move it',
+    text:'Tap to add a label · drag an existing label to move it',
+    placeCallout:'Tap the feature to place the callout',
+    draw:'Drag to draw freehand',
+    arrow:'Drag from tail to head',
+    erase:'Tap or drag across markups to erase them',
+    move:'Drag to pan · pinch to zoom · drag a markup or the legend to move it'
+  };
+  if(hints[id]) showHint(hints[id]);
+}
+
+/* ── Icon glyphs (100-unit space, centered ~50,50) ──────────── */
+function glyph100(kind){
+  if(kind==='check') return `
+    <path d="M20 52 L42 76 L82 24" fill="none" stroke="#fff" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M20 52 L42 76 L82 24" fill="none" stroke="${COLORS.verified}" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>`;
+  if(kind==='x') return `
+    <path d="M26 26 L74 74 M74 26 L26 74" fill="none" stroke="#fff" stroke-width="23" stroke-linecap="round"/>
+    <path d="M26 26 L74 74 M74 26 L26 74" fill="none" stroke="${COLORS.missing}" stroke-width="14" stroke-linecap="round"/>`;
+  /* quadrant monitoring-well symbol in the given colors */
+  if(kind==='wellblue') return wellGlyph(COLORS.wellBlue, COLORS.wellBlueLine);
+  return wellGlyph(COLORS.well, COLORS.wellLine); // 'well' = red (abandoned/destroyed)
+}
+function wellGlyph(fill, line){
+  return `
+    <circle cx="50" cy="50" r="46" fill="#fff" stroke="${line}" stroke-width="3.5"/>
+    <path d="M50 50 L50 4 A46 46 0 0 1 96 50 Z" fill="${fill}"/>
+    <path d="M50 50 L50 96 A46 46 0 0 1 4 50 Z" fill="${fill}"/>
+    <line x1="50" y1="4" x2="50" y2="96" stroke="${line}" stroke-width="3.5"/>
+    <line x1="4" y1="50" x2="96" y2="50" stroke="${line}" stroke-width="3.5"/>`;
+}
+/* small glyph for the tool rail */
+function glyphSVG(kind){
+  return `<svg viewBox="0 0 100 100" width="26" height="26">${glyph100(kind)}</svg>`;
+}
+function iconMove(){ return `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#0f172a" stroke-width="2"><path d="M12 2v20M2 12h20"/><path d="m9 5 3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3"/></svg>`; }
+function iconText(){ return `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#0f172a" stroke-width="2"><path d="M4 7V5h16v2M9 5v14M7 19h4"/></svg>`; }
+function iconCallout(){ return `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#ca8a04" stroke-width="2"><rect x="3" y="4" width="14" height="10" rx="2"/><path d="M8 14 6 20l7-6"/></svg>`; }
+function iconDraw(){ return `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M3 21s2-6 5-9 6-2 6-2M14 10l4-4a2 2 0 1 1 3 3l-4 4"/></svg>`; }
+function iconArrow(){ return `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M5 19 19 5M11 5h8v8"/></svg>`; }
+function iconErase(){ return `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#0f172a" stroke-width="2"><path d="m16 3 5 5L10 19H5v-5z"/><path d="M13 6 18 11"/></svg>`; }
+
+/* ── Coordinate helpers ─────────────────────────────────────── */
+function toWorld(clientX, clientY){
+  const pt = stage.createSVGPoint(); pt.x = clientX; pt.y = clientY;
+  const m = stage.getScreenCTM();
+  if(!m) return {x:0,y:0};
+  const p = pt.matrixTransform(m.inverse());
+  return { x:p.x, y:p.y };
+}
+function worldPerPx(){ const r = stage.getBoundingClientRect(); return vb.w / r.width; }
+
+/* ── Map loading ────────────────────────────────────────────── */
+document.getElementById('map-input').addEventListener('change', handleMapFile);
+document.getElementById('project-input').addEventListener('change', handleProjectFile);
+function pickMap(){ closeSheet('menu-backdrop'); document.getElementById('map-input').click(); }
+function pickProject(){ closeSheet('menu-backdrop'); document.getElementById('project-input').click(); }
+
+async function handleMapFile(e){
+  const file = e.target.files[0]; if(!file) return;
+  e.target.value = '';
+  try{
+    /* every freshly loaded map starts markups at 40% */
+    state.iconScale = 0.4; state.labelScale = 0.4;
+    if(file.type === 'application/pdf'){
+      const pdf = await loadPdf(file);
+      let pageNum = 1;
+      if(pdf.numPages > 1){
+        pageNum = await pickPdfPage(pdf);      // ask which page; discard the rest
+        if(!pageNum){ return; }                // user cancelled
+      }
+      toast('Rendering page ' + pageNum + '…');
+      const uri = await renderPdfPage(pdf, pageNum, 2.5);
+      loadImageUri(uri);
+    } else {
+      const uri = await fileToDataURL(file);
+      loadImageUri(uri);
+    }
+  }catch(err){
+    console.error(err);
+    toast(err.message || 'Could not load that file');
+  }
+}
+function fileToDataURL(file){
+  return new Promise((res,rej)=>{ const r=new FileReader();
+    r.onload=()=>res(r.result); r.onerror=()=>rej(new Error('File read failed')); r.readAsDataURL(file); });
+}
+function loadScript(src){
+  return new Promise((res,rej)=>{ const s=document.createElement('script');
+    s.src=src; s.onload=res; s.onerror=()=>rej(new Error('script load failed')); document.head.appendChild(s); });
+}
+async function loadPdf(file){
+  if(!window.pdfjsLib){
+    try{ await loadScript(PDF_CDN); window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER; }
+    catch{ throw new Error('PDF needs internet the first time — load an image instead, or connect & retry.'); }
+  }
+  const buf = await file.arrayBuffer();
+  return await window.pdfjsLib.getDocument({ data:buf }).promise;
+}
+async function renderPdfPage(pdf, pageNum, scale){
+  const page = await pdf.getPage(pageNum);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width; canvas.height = viewport.height;
+  await page.render({ canvasContext:canvas.getContext('2d'), viewport }).promise;
+  return canvas.toDataURL('image/png');
+}
+/* present a thumbnail picker; resolves to the chosen page number, or null if cancelled */
+let pdfPickResolver = null;
+function pickPdfPage(pdf){
+  const grid = document.getElementById('pdf-page-grid');
+  document.getElementById('pdf-pick-title').textContent =
+    `Which of the ${pdf.numPages} pages is the site map?`;
+  grid.innerHTML = '';
+  for(let n=1; n<=pdf.numPages; n++){
+    const cell = document.createElement('button');
+    cell.type='button'; cell.className='pdf-thumb';
+    cell.innerHTML = `<div class="frame"><div class="spin"></div></div><span class="lbl">Page ${n}</span>`;
+    cell.onclick = ()=> resolvePdfPick(n);
+    grid.appendChild(cell);
+    /* render a small thumbnail lazily */
+    renderPdfPage(pdf, n, 0.4).then(uri=>{
+      const frame = cell.querySelector('.frame');
+      if(frame){ frame.innerHTML = `<img alt="Page ${n}" src="${uri}">`; }
+    }).catch(()=>{ const f=cell.querySelector('.frame'); if(f) f.textContent='?'; });
+  }
+  openSheet('pdf-backdrop');
+  return new Promise(res=>{ pdfPickResolver = res; });
+}
+function resolvePdfPick(n){ closeSheet('pdf-backdrop'); const r=pdfPickResolver; pdfPickResolver=null; if(r) r(n); }
+function cancelPdfPick(){ closeSheet('pdf-backdrop'); const r=pdfPickResolver; pdfPickResolver=null; if(r) r(null); }
+function loadImageUri(uri){
+  const img = new Image();
+  img.onload = ()=>{
+    state.imageUri = uri; state.imgW = img.naturalWidth; state.imgH = img.naturalHeight;
+    baseImg.setAttribute('href', uri);
+    baseImg.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', uri); // Safari rasterization
+    baseImg.setAttribute('width', state.imgW); baseImg.setAttribute('height', state.imgH);
+    /* size-relative markup units */
+    const minDim = Math.min(state.imgW, state.imgH);
+    state.U = clamp(minDim*0.05, 30, 220);
+    state.STROKE = clamp(minDim*0.004, 2, 14);
+    state.FS = state.U * 0.42;
+    state.legend.x = state.imgW*0.03; state.legend.y = state.imgH*0.03;
+    document.getElementById('placeholder').style.display='none';
+    fitView();
+    renderAll(); refreshSizeReadouts();
+    if(tool==='move') showHint('Pick a tool below to start marking up');
+  };
+  img.onerror = ()=> toast('That image could not be displayed');
+  img.src = uri;
+}
+
+/* ── Fit / zoom ─────────────────────────────────────────────── */
+function fitView(){
+  if(!state.imgW) return;
+  vb = { x:0, y:0, w:state.imgW, h:state.imgH };
+  applyVB();
+}
+function zoomStep(f){ const r=stage.getBoundingClientRect(); zoomAt(r.left+r.width/2, r.top+r.height/2, f); }
+function zoomAt(cx, cy, f){
+  const r = stage.getBoundingClientRect();
+  const wx = vb.x + (cx-r.left)/r.width * vb.w;
+  const wy = vb.y + (cy-r.top)/r.height * vb.h;
+  let nw = vb.w/f, nh = vb.h/f;
+  const maxW = state.imgW*6, minW = state.imgW*0.05;
+  if(nw>maxW || nh>state.imgH*6){ nw=vb.w; nh=vb.h; }
+  if(nw<minW){ nw=vb.w; nh=vb.h; }
+  vb.x = wx - (cx-r.left)/r.width * nw;
+  vb.y = wy - (cy-r.top)/r.height * nh;
+  vb.w = nw; vb.h = nh;
+  applyVB();
+}
+
+/* ══ RENDERING ═════════════════════════════════════════════════ */
+function renderAll(){ renderDraws(); renderItems(); renderLegend(); renderUI(); }
+
+function el(tag, attrs){ const n=document.createElementNS(SVGNS, tag);
+  for(const k in attrs) n.setAttribute(k, attrs[k]); return n; }
+
+/* draw + arrow layer */
+function renderDraws(){
+  drawLayer.innerHTML='';
+  state.items.filter(i=>i.type==='draw'||i.type==='arrow').forEach(it=>{
+    const g = el('g', { class:'item', 'data-id':it.id });
+    if(it.type==='draw'){
+      const d = pointsToPath(it.pts);
+      g.appendChild(el('path', { d, fill:'none', stroke:'transparent', 'stroke-width':state.STROKE*5, 'stroke-linecap':'round' })); // hit area
+      g.appendChild(el('path', { d, fill:'none', stroke:it.color||COLORS.draw, 'stroke-width':state.STROKE, 'stroke-linecap':'round', 'stroke-linejoin':'round' }));
+    } else {
+      appendArrow(g, it);
+    }
+    drawLayer.appendChild(g);
+  });
+}
+function appendArrow(g, it){
+  const {x1,y1,x2,y2} = it; const col = it.color||COLORS.arrow;
+  const ang = Math.atan2(y2-y1, x2-x1);
+  const head = state.U*0.7;
+  const bx = x2 - Math.cos(ang)*head*0.55, by = y2 - Math.sin(ang)*head*0.55;
+  g.appendChild(el('line', { x1,y1,x2:bx,y2:by, stroke:'transparent', 'stroke-width':state.STROKE*5, 'stroke-linecap':'round' }));
+  g.appendChild(el('line', { x1,y1,x2:bx,y2:by, stroke:col, 'stroke-width':state.STROKE, 'stroke-linecap':'round' }));
+  const hx1 = x2 - Math.cos(ang-0.42)*head, hy1 = y2 - Math.sin(ang-0.42)*head;
+  const hx2 = x2 - Math.cos(ang+0.42)*head, hy2 = y2 - Math.sin(ang+0.42)*head;
+  g.appendChild(el('path', { d:`M${x2} ${y2} L${hx1} ${hy1} L${hx2} ${hy2} Z`, fill:col, stroke:col, 'stroke-width':state.STROKE*0.4, 'stroke-linejoin':'round' }));
+}
+function pointsToPath(pts){
+  if(!pts.length) return '';
+  let d = `M${pts[0][0]} ${pts[0][1]}`;
+  for(let i=1;i<pts.length;i++) d += ` L${pts[i][0]} ${pts[i][1]}`;
+  return d;
+}
+
+/* icons + text + callouts */
+function renderItems(){
+  itemLayer.innerHTML='';
+  state.items.forEach(it=>{
+    if(it.type==='check'||it.type==='x'||it.type==='well'||it.type==='wellblue') itemLayer.appendChild(renderIcon(it));
+    else if(it.type==='text') itemLayer.appendChild(renderText(it));
+    else if(it.type==='callout') itemLayer.appendChild(renderCallout(it));
+  });
+}
+function renderIcon(it){
+  const k = iconU()/100;
+  const g = el('g', { class:'item', 'data-id':it.id,
+    transform:`translate(${it.x} ${it.y}) scale(${k}) translate(-50 -50)` });
+  g.innerHTML = glyph100(it.type);
+  return g;
+}
+function measure(lines){
+  const FS = labelFS();
+  const cw = FS*0.58, lh = FS*1.3;
+  const w = Math.max(...lines.map(l=>l.length)) * cw + FS*0.9;
+  const h = lines.length*lh + FS*0.7;
+  return { w, h, lh, cw };
+}
+function wrap(text, max){
+  const out=[];
+  text.split('\n').forEach(par=>{
+    const words = par.split(/\s+/).filter(Boolean); let line='';
+    if(words.length===0){ out.push(''); return; }
+    words.forEach(wd=>{
+      if((line+' '+wd).trim().length>max){ if(line) out.push(line); line=wd; }
+      else line=(line?line+' ':'')+wd;
+    });
+    if(line) out.push(line);
+  });
+  return out.length?out:[''];
+}
+function renderText(it){
+  const FS = labelFS();
+  const lines = wrap(it.text, 22);
+  const m = measure(lines);
+  const g = el('g', { class:'item', 'data-id':it.id, transform:`translate(${it.x} ${it.y})` });
+  g.appendChild(el('rect', { x:0, y:0, width:m.w, height:m.h, rx:FS*0.25,
+    fill:COLORS.textFill, stroke:COLORS.textStroke, 'stroke-width':state.STROKE*0.6, 'fill-opacity':0.95 }));
+  const t = el('text', { x:FS*0.45, y:FS*1.05, 'font-size':FS,
+    'font-family':'sans-serif', 'font-weight':'600', fill:'#0f172a' });
+  lines.forEach((ln,i)=>{ const ts=el('tspan',{ x:FS*0.45, dy:(i===0?0:m.lh) }); ts.textContent=ln||' '; t.appendChild(ts); });
+  g.appendChild(t);
+  return g;
+}
+function renderCallout(it){
+  const FS = labelFS();
+  const lines = wrap(it.text, 20);
+  const m = measure(lines);
+  const g = el('g', { class:'item', 'data-id':it.id });
+  /* leader: from box center-ish to target */
+  const bx = it.x, by = it.y;
+  const cx = bx + m.w/2, cy = by + m.h/2;
+  g.appendChild(el('line', { x1:cx, y1:cy, x2:it.tx, y2:it.ty,
+    stroke:COLORS.calloutStroke, 'stroke-width':state.STROKE*0.27 }));
+  g.appendChild(el('circle', { cx:it.tx, cy:it.ty, r:iconU()*0.09, fill:COLORS.calloutStroke }));
+  /* box */
+  const box = el('g', { 'data-role':'box', transform:`translate(${bx} ${by})` });
+  box.appendChild(el('rect', { x:0, y:0, width:m.w, height:m.h, rx:FS*0.2,
+    fill:COLORS.calloutFill, stroke:COLORS.calloutStroke, 'stroke-width':state.STROKE*0.7 }));
+  const t = el('text', { x:FS*0.45, y:FS*1.05, 'font-size':FS,
+    'font-family':'sans-serif', 'font-weight':'700', fill:'#422006' });
+  lines.forEach((ln,i)=>{ const ts=el('tspan',{ x:FS*0.45, dy:(i===0?0:m.lh) }); ts.textContent=ln||' '; t.appendChild(ts); });
+  box.appendChild(t);
+  g.appendChild(box);
+  /* draggable target handle (invisible larger hit) */
+  g.appendChild(el('circle', { class:'handle', 'data-target':it.id, 'data-id':it.id,
+    cx:it.tx, cy:it.ty, r:iconU()*0.28, fill:'transparent', stroke:COLORS.calloutStroke,
+    'stroke-width':state.STROKE*0.5, 'stroke-dasharray':`${iconU()*0.12} ${iconU()*0.1}`, 'stroke-opacity':0.5 }));
+  return g;
+}
+
+/* legend */
+/* backfill any legend labels missing from older saved projects */
+function ensureLegendLines(){
+  const d = { check:'Monitoring Well Present / Verified', x:'Missing Monitoring Well',
+              well:'Abandoned / Destroyed Monitoring Well', wellblue:'Unmapped Monitoring Well' };
+  if(!state.legend.lines) state.legend.lines = {};
+  for(const k in d){ if(!state.legend.lines[k]) state.legend.lines[k] = d[k]; }
+}
+function legendDims(){
+  ensureLegendLines();
+  const pad = state.FS*0.7, row = state.U*0.95, icon = state.U*0.7;
+  const texts = [state.legend.lines.check, state.legend.lines.x, state.legend.lines.well, state.legend.lines.wellblue];
+  const maxChars = Math.max(...texts.map(t=>t.length));
+  const w = icon*1.5 + maxChars*state.FS*0.5 + pad*2;
+  const h = pad*2 + row*texts.length + state.FS*0.6;
+  return { w, h };
+}
+/* place the legend snug in the top-right corner of the image */
+function placeLegendTopRight(){
+  const { w } = legendDims();
+  const margin = state.imgW*0.02;
+  state.legend.x = Math.max(margin, state.imgW - w - margin);
+  state.legend.y = margin;
+}
+function renderLegend(){
+  legendLayer.innerHTML='';
+  ensureLegendLines();
+  const lgToggle = document.getElementById('legend-toggle-label');
+  if(lgToggle) lgToggle.textContent = state.legend.show ? 'Hide legend' : 'Show legend';
+  if(!state.legend.show || !state.imgW) return;
+  const pad = state.FS*0.7, row = state.U*0.95, icon = state.U*0.7;
+  const rows = [
+    { kind:'check', text:state.legend.lines.check },
+    { kind:'x',     text:state.legend.lines.x },
+    { kind:'well',  text:state.legend.lines.well },
+    { kind:'wellblue', text:state.legend.lines.wellblue }
+  ];
+  const { w, h } = legendDims();
+  const g = el('g', { class:'item', 'data-id':'legend', transform:`translate(${state.legend.x} ${state.legend.y})` });
+  g.appendChild(el('rect', { x:0, y:0, width:w, height:h, rx:state.FS*0.3,
+    fill:'#ffffff', stroke:'#0f172a', 'stroke-width':state.STROKE*0.7, 'fill-opacity':0.96 }));
+  const title = el('text', { x:pad, y:pad+state.FS*0.9, 'font-size':state.FS*0.8, 'font-weight':'800',
+    'font-family':'sans-serif', fill:'#0f172a', 'letter-spacing':'1' }); title.textContent='LEGEND';
+  g.appendChild(title);
+  rows.forEach((r,i)=>{
+    const yTop = pad + state.FS*1.5 + i*row;
+    const k = icon/100;
+    const ig = el('g', { transform:`translate(${pad+icon*0.5} ${yTop+row*0.35}) scale(${k}) translate(-50 -50)`,
+      class:'handle', 'data-legrow':r.kind });
+    ig.innerHTML = glyph100(r.kind);
+    g.appendChild(ig);
+    const tx = el('text', { class:'handle', 'data-legrow':r.kind, x:pad+icon*1.35, y:yTop+row*0.35+state.FS*0.35,
+      'font-size':state.FS*0.78, 'font-family':'sans-serif', 'font-weight':'600', fill:'#1e293b' });
+    tx.textContent = r.text; g.appendChild(tx);
+  });
+  legendLayer.appendChild(g);
+}
+
+/* selection highlight + handles */
+function renderUI(){ uiLayer.innerHTML=''; if(!selectedId||tool!=='move') return;
+  const it = getItem(selectedId); if(!it) return;
+  const b = itemBBox(it); if(!b) return;
+  const pad = state.U*0.14;
+  uiLayer.appendChild(el('rect', { x:b.x-pad, y:b.y-pad, width:b.w+pad*2, height:b.h+pad*2,
+    rx:state.U*0.12, fill:'none', stroke:'#2563eb', 'stroke-width':state.STROKE*0.7, 'stroke-dasharray':`${state.U*0.14} ${state.U*0.1}` }));
+  addHandle(b.x+b.w+pad, b.y-pad, 'del', it.id);
+  if(it.type==='text'||it.type==='callout') addHandle(b.x-pad, b.y-pad, 'edit', it.id);
+}
+function addHandle(cx, cy, action, id){
+  const r = state.U*0.28;
+  const g = el('g', { class:'handle', 'data-action':action, 'data-id':id, transform:`translate(${cx} ${cy})` });
+  g.appendChild(el('circle', { cx:0, cy:0, r, fill: action==='del'?'#dc2626':'#2563eb', stroke:'#fff', 'stroke-width':state.STROKE*0.5 }));
+  if(action==='del') g.innerHTML += `<path d="M${-r*0.4} ${-r*0.4} L${r*0.4} ${r*0.4} M${r*0.4} ${-r*0.4} L${-r*0.4} ${r*0.4}" stroke="#fff" stroke-width="${state.STROKE*0.8}" stroke-linecap="round"/>`;
+  else g.innerHTML += `<path d="M${-r*0.35} ${r*0.35} L${r*0.05} ${-r*0.45} L${r*0.35} ${-r*0.15} L${-r*0.05} ${r*0.45} Z" fill="#fff"/>`;
+  uiLayer.appendChild(g);
+}
+function positionUI(){ /* handles/selection scale with map; nothing extra needed */ }
+
+function itemBBox(it){
+  if(it.type==='check'||it.type==='x'||it.type==='well'||it.type==='wellblue'){
+    const s=iconU(); return { x:it.x-s/2, y:it.y-s/2, w:s, h:s };
+  }
+  if(it.type==='text'){ const m=measure(wrap(it.text,22)); return { x:it.x, y:it.y, w:m.w, h:m.h }; }
+  if(it.type==='callout'){ const m=measure(wrap(it.text,20)); return { x:it.x, y:it.y, w:m.w, h:m.h }; }
+  return null;
+}
+
+/* ══ DATA OPS + UNDO ═══════════════════════════════════════════ */
+function snapshot(){ return JSON.stringify({ items:state.items, legend:state.legend, nextId:state.nextId, iconScale:state.iconScale, labelScale:state.labelScale }); }
+function pushUndo(prev){ undoStack.push(prev); if(undoStack.length>60) undoStack.shift(); redoStack.length=0; refreshUndoButtons(); }
+function refreshUndoButtons(){
+  document.getElementById('undo-btn').disabled = undoStack.length===0;
+  document.getElementById('redo-btn').disabled = redoStack.length===0;
+}
+function restore(str){ const s=JSON.parse(str); state.items=s.items; state.legend=s.legend; state.nextId=s.nextId;
+  if(typeof s.iconScale==='number') state.iconScale=s.iconScale;
+  if(typeof s.labelScale==='number') state.labelScale=s.labelScale;
+  renderAll(); refreshSizeReadouts(); refreshLegendToggle(); }
+function undo(){ if(!undoStack.length) return; redoStack.push(snapshot()); restore(undoStack.pop()); refreshUndoButtons(); }
+function redo(){ if(!redoStack.length) return; undoStack.push(snapshot()); restore(redoStack.pop()); refreshUndoButtons(); }
+
+function getItem(id){ return state.items.find(i=>String(i.id)===String(id)); }
+function newId(){ return state.nextId++; }
+
+function addIcon(type, x, y){
+  const prev=snapshot();
+  state.items.push({ id:newId(), type, x, y });
+  /* a gray well marks an abandoned/destroyed well — surface the legend automatically */
+  let legendChanged=false;
+  if((type==='well'||type==='wellblue') && !state.legend.show){ state.legend.show=true; placeLegendTopRight(); legendChanged=true; }
+  pushUndo(prev); renderItems();
+  if(legendChanged){ renderLegend(); refreshLegendToggle();
+    toast('Legend added (top-right) — drag to move, tap a row to edit'); }
+}
+function refreshLegendToggle(){
+  const lg=document.getElementById('legend-toggle-label');
+  if(lg) lg.textContent = state.legend.show ? 'Hide legend' : 'Show legend';
+}
+/* ── marker / label size steppers ─────────────────────────────── */
+const SIZE_STEP = 1.15;
+const SIZE_MIN = 0.02;   // effectively no floor — markers/text can go as small as wanted
+function bumpIconSize(dir){
+  if(!state.imgW){ toast('Load a site map first'); return; }
+  const prev=snapshot();
+  state.iconScale = clamp(state.iconScale * (dir>0?SIZE_STEP:1/SIZE_STEP), SIZE_MIN, 3);
+  pushUndo(prev); renderItems(); renderUI(); refreshSizeReadouts();
+}
+function bumpLabelSize(dir){
+  if(!state.imgW){ toast('Load a site map first'); return; }
+  const prev=snapshot();
+  state.labelScale = clamp(state.labelScale * (dir>0?SIZE_STEP:1/SIZE_STEP), SIZE_MIN, 3.5);
+  pushUndo(prev); renderItems(); renderUI(); refreshSizeReadouts();
+}
+function refreshSizeReadouts(){
+  const a=document.getElementById('icon-size-val'), b=document.getElementById('label-size-val');
+  if(a) a.textContent = Math.round(state.iconScale*100)+'%';
+  if(b) b.textContent = Math.round(state.labelScale*100)+'%';
+  updateSizePreviews();
+}
+/* live preview of the chosen size, shown in the menu while adjusting */
+function updateSizePreviews(){
+  const ip=document.getElementById('icon-size-preview');
+  if(ip){
+    const px = Math.max(6, Math.round(52*state.iconScale));
+    ip.innerHTML = ['check','x','well','wellblue'].map(k=>
+      `<svg viewBox="0 0 100 100" width="${px}" height="${px}">${glyph100(k)}</svg>`).join('');
+  }
+  const lp=document.getElementById('label-size-preview');
+  if(lp){
+    const fs = Math.max(6, Math.round(34*state.labelScale));
+    lp.innerHTML = `<span style="font-size:${fs}px;font-weight:700;color:#0f172a;line-height:1.1">Sample&nbsp;MW-7</span>`;
+  }
+}
+function addText(x, y, text){ const prev=snapshot(); state.items.push({ id:newId(), type:'text', x, y, text }); pushUndo(prev); renderItems(); }
+function addCallout(fx, fy, text){
+  // (fx,fy) is the tapped feature = leader target; box floats up-right of it
+  const prev=snapshot();
+  const off = state.U*1.3;
+  state.items.push({ id:newId(), type:'callout', x:fx + off, y:fy - off*2.2, tx:fx, ty:fy, text });
+  pushUndo(prev); renderItems();
+}
+function deleteItem(id){
+  if(id==='legend'){ const prev=snapshot(); state.legend.show=false; pushUndo(prev); renderLegend(); renderUI(); return; }
+  const prev=snapshot(); state.items = state.items.filter(i=>String(i.id)!==String(id));
+  if(String(selectedId)===String(id)) selectedId=null;
+  pushUndo(prev); renderAll();
+}
+function editItem(id){
+  const it=getItem(id); if(!it) return;
+  openTextModal(it.type==='callout'?'Edit callout':'Edit text', it.text).then(v=>{
+    if(v===null) return; const prev=snapshot(); it.text=v.trim()||it.text; pushUndo(prev); renderItems(); renderUI();
+  });
+}
+
+/* ══ POINTER / GESTURE ENGINE ══════════════════════════════════ */
+const pointers = new Map();
+let gesture = null;   // single-pointer gesture
+let pinch = null;     // two-pointer gesture
+const MOVE_THRESH = 7;
+
+stage.addEventListener('pointerdown', onDown);
+stage.addEventListener('pointermove', onMove);
+stage.addEventListener('pointerup',   onUp);
+stage.addEventListener('pointercancel', onUp);
+stage.addEventListener('wheel', e=>{ if(!state.imgW) return; e.preventDefault(); zoomAt(e.clientX, e.clientY, e.deltaY<0?1.12:1/1.12); }, { passive:false });
+
+function onDown(e){
+  if(!state.imgW) return;
+  stage.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+
+  if(pointers.size===2){ startPinch(); gesture=null; return; }
+  if(pointers.size>2) return;
+
+  const world = toWorld(e.clientX, e.clientY);
+  const base = { id:e.pointerId, startX:e.clientX, startY:e.clientY, lastX:e.clientX, lastY:e.clientY,
+                 moved:false, startWorld:world };
+
+  /* handle taps (delete / edit / legend row / callout target) */
+  const handleEl = e.target.closest && e.target.closest('[data-action]');
+  if(handleEl){ gesture = { ...base, mode:'handle', action:handleEl.dataset.action, targetId:handleEl.dataset.id }; return; }
+  const legRow = e.target.closest && e.target.closest('[data-legrow]');
+  if(legRow && tool==='move'){ gesture = { ...base, mode:'legendEdit', legRow:legRow.dataset.legrow }; return; }
+  const targetHandle = e.target.closest && e.target.closest('[data-target]');
+  if(targetHandle && tool==='move'){
+    const it=getItem(targetHandle.dataset.target);
+    gesture = { ...base, mode:'targetDrag', item:it, tx0:it.tx, ty0:it.ty, pre:snapshot() }; return;
+  }
+
+  if(tool==='draw'){ gesture={ ...base, mode:'draw', pts:[[world.x,world.y]] };
+    state.items.push({ id:newId(), type:'draw', color:COLORS.draw, pts:gesture.pts, _live:true }); gesture.pre=snapshotBeforeLive(); renderDraws(); return; }
+  if(tool==='arrow'){ gesture={ ...base, mode:'arrow' };
+    gesture.arrow={ id:newId(), type:'arrow', color:COLORS.arrow, x1:world.x,y1:world.y,x2:world.x,y2:world.y,_live:true };
+    state.items.push(gesture.arrow); gesture.pre=snapshotBeforeLive(); renderDraws(); return; }
+
+  if(tool==='move'){
+    /* drag the legend by its body (rows are caught above as legendEdit) */
+    if(e.target.closest && e.target.closest('[data-id="legend"]')){
+      gesture={ ...base, mode:'legendDrag', lx0:state.legend.x, ly0:state.legend.y, pre:snapshot() }; return;
+    }
+    const hit = hitItem(e.target);
+    if(hit && hit.type!=='draw' && hit.type!=='arrow' && hit.type!=='legend'){
+      gesture={ ...base, mode:'itemDrag', item:hit, ix0:hit.x, iy0:hit.y, pre:snapshot() };
+      selectedId=hit.id; renderUI(); return;
+    }
+    gesture={ ...base, mode:'pan' }; return;
+  }
+  /* icon placement tools: click-hold an existing marker of the SAME type to drag it; tap empty space to place a new one */
+  if(tool==='check'||tool==='x'||tool==='well'||tool==='wellblue'){
+    const hit = hitItem(e.target);
+    if(hit && hit.type===tool){
+      gesture={ ...base, mode:'itemDrag', item:hit, ix0:hit.x, iy0:hit.y, pre:snapshot() };
+      selectedId=hit.id; renderUI(); return;
+    }
+    gesture={ ...base, mode:'tapAction' }; return;
+  }
+  /* text tool: click-hold an existing text box to drag it; tap empty space to add a new one */
+  if(tool==='text'){
+    const hit = hitItem(e.target);
+    if(hit && hit.type==='text'){
+      gesture={ ...base, mode:'itemDrag', item:hit, ix0:hit.x, iy0:hit.y, pre:snapshot() };
+      selectedId=hit.id; renderUI(); return;
+    }
+    gesture={ ...base, mode:'tapAction' }; return;
+  }
+  /* eraser: delete continuously under the finger (down + drag) */
+  if(tool==='erase'){
+    gesture={ ...base, mode:'erase', pre:snapshot(), did:false };
+    eraseAt(e.clientX, e.clientY, gesture); return;
+  }
+  /* text / callout: tap to act, drag to pan */
+  gesture={ ...base, mode:'tapAction' };
+}
+
+/* delete whatever markup sits under the given screen point (coordinate-based,
+   because pointer capture retargets move/up events to the stage) */
+function eraseAt(clientX, clientY, g){
+  const elu = document.elementFromPoint(clientX, clientY);
+  const hit = hitItem(elu);
+  if(hit && hit.id!=='legend'){
+    state.items = state.items.filter(i=>String(i.id)!==String(hit.id));
+    if(String(selectedId)===String(hit.id)) selectedId=null;
+    g.did = true; renderDraws(); renderItems(); renderUI();
+  }
+}
+
+function onMove(e){
+  if(pinch){ updatePinch(e); return; }
+  if(!gesture || e.pointerId!==gesture.id) { if(pointers.has(e.pointerId)) pointers.set(e.pointerId,{x:e.clientX,y:e.clientY}); return; }
+  pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+  const dx=e.clientX-gesture.startX, dy=e.clientY-gesture.startY;
+  if(Math.hypot(dx,dy)>MOVE_THRESH) gesture.moved=true;
+
+  switch(gesture.mode){
+    case 'draw':{ const w=toWorld(e.clientX,e.clientY); gesture.pts.push([w.x,w.y]); renderDraws(); break; }
+    case 'arrow':{ const w=toWorld(e.clientX,e.clientY); gesture.arrow.x2=w.x; gesture.arrow.y2=w.y; renderDraws(); break; }
+    case 'itemDrag':{ const w=toWorld(e.clientX,e.clientY);
+      gesture.item.x = gesture.ix0 + (w.x-gesture.startWorld.x);
+      gesture.item.y = gesture.iy0 + (w.y-gesture.startWorld.y);
+      renderItems(); renderUI(); break; }
+    case 'targetDrag':{ const w=toWorld(e.clientX,e.clientY);
+      gesture.item.tx = gesture.tx0 + (w.x-gesture.startWorld.x);
+      gesture.item.ty = gesture.ty0 + (w.y-gesture.startWorld.y);
+      renderItems(); break; }
+    case 'legendDrag':{ const w=toWorld(e.clientX,e.clientY);
+      state.legend.x = gesture.lx0 + (w.x-gesture.startWorld.x);
+      state.legend.y = gesture.ly0 + (w.y-gesture.startWorld.y);
+      renderLegend(); break; }
+    case 'erase':{ eraseAt(e.clientX, e.clientY, gesture); break; }
+    case 'legendEdit':{ /* a clean tap edits the row; a drag moves the whole legend */
+      if(!gesture.moved) break;
+      gesture.mode='legendDrag'; gesture.lx0=state.legend.x; gesture.ly0=state.legend.y; gesture.pre=snapshot();
+      const w=toWorld(e.clientX,e.clientY);
+      state.legend.x = gesture.lx0 + (w.x-gesture.startWorld.x);
+      state.legend.y = gesture.ly0 + (w.y-gesture.startWorld.y);
+      renderLegend(); break; }
+    case 'pan': case 'tapAction': case 'handle':{
+      if(gesture.mode==='handle'){ if(!gesture.moved) break; gesture.mode='pan'; }
+      const wpp=worldPerPx();
+      vb.x -= (e.clientX-gesture.lastX)*wpp; vb.y -= (e.clientY-gesture.lastY)*wpp;
+      applyVB(); break; }
+  }
+  gesture.lastX=e.clientX; gesture.lastY=e.clientY;
+}
+
+function onUp(e){
+  pointers.delete(e.pointerId);
+  if(pinch){ if(pointers.size<2){ pinch=null; } return; }
+  if(!gesture || e.pointerId!==gesture.id){ return; }
+  const g=gesture; gesture=null;
+
+  switch(g.mode){
+    case 'draw':{ const it=state.items[state.items.length-1]; delete it._live;
+      if(it.pts.length<2) state.items.pop(); pushUndo(g.pre); break; }
+    case 'arrow':{ delete g.arrow._live;
+      if(Math.hypot(g.arrow.x2-g.arrow.x1, g.arrow.y2-g.arrow.y1) < state.U*0.4){
+        state.items = state.items.filter(i=>i!==g.arrow); renderDraws();
+      } else pushUndo(g.pre);
+      break; }
+    case 'itemDrag':{ if(g.moved) pushUndo(g.pre); break; }
+    case 'targetDrag':{ if(g.moved) pushUndo(g.pre); break; }
+    case 'legendDrag':{ if(g.moved) pushUndo(g.pre); break; }
+    case 'handle':{ if(!g.moved){ if(g.action==='del') deleteItem(g.targetId); else if(g.action==='edit') editItem(g.targetId); } break; }
+    case 'legendEdit':{ if(!g.moved) editLegendRow(g.legRow); break; }
+    case 'erase':{ if(g.did) pushUndo(g.pre); break; }
+    case 'tapAction':{ if(!g.moved) doPlacement(g.startWorld, e.target); break; }
+    case 'pan':{ if(!g.moved && tool==='move'){ selectedId=null; renderUI(); } break; }
+  }
+  refreshUndoButtons();
+}
+/* for live draw/arrow we push the item then snapshot excludes the live flag */
+function snapshotBeforeLive(){
+  const clean = state.items.filter(i=>!i._live);
+  return JSON.stringify({ items:clean, legend:state.legend, nextId:state.nextId-1 });
+}
+
+function doPlacement(world, targetEl){
+  if(tool==='check'||tool==='x'||tool==='well'||tool==='wellblue'){ addIcon(tool, world.x, world.y); return; }
+  if(tool==='text'){ openTextModal('Enter label text','').then(v=>{ if(v!==null && v.trim()) addText(world.x, world.y, v.trim()); }); return; }
+  if(tool==='placeCallout'){ addCallout(world.x, world.y, pendingCalloutText); setTool('move'); return; }
+}
+
+function hitItem(target){
+  if(!target || !target.closest) return null;
+  const g = target.closest('.item'); if(!g) return null;
+  const id = g.getAttribute('data-id'); if(id==='legend') return { id:'legend', type:'legend' };
+  return getItem(id);
+}
+
+/* pinch */
+function startPinch(){
+  /* if a draw/arrow stroke was mid-flight, discard it cleanly */
+  if(state.items.some(i=>i._live)){ state.items = state.items.filter(i=>!i._live); renderDraws(); }
+  const [a,b] = [...pointers.values()];
+  pinch = { d0:dist(a,b), mid0:mid(a,b), vb0:{...vb} };
+}
+function updatePinch(e){
+  if(pointers.has(e.pointerId)) pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+  if(pointers.size<2) return;
+  const [a,b] = [...pointers.values()];
+  const d = dist(a,b), m = mid(a,b);
+  let scale = d/pinch.d0; if(!isFinite(scale)||scale<=0) return;
+  scale = clamp(scale, pinch.vb0.w/(state.imgW*6), pinch.vb0.w/(state.imgW*0.05));
+  const r = stage.getBoundingClientRect();
+  let nw = pinch.vb0.w/scale, nh = pinch.vb0.h/scale;
+  const wx = pinch.vb0.x + (pinch.mid0.x-r.left)/r.width*pinch.vb0.w;
+  const wy = pinch.vb0.y + (pinch.mid0.y-r.top)/r.height*pinch.vb0.h;
+  vb.x = wx - (m.x-r.left)/r.width*nw;
+  vb.y = wy - (m.y-r.top)/r.height*nh;
+  vb.w = nw; vb.h = nh; applyVB();
+}
+function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+function mid(a,b){ return { x:(a.x+b.x)/2, y:(a.y+b.y)/2 }; }
+
+/* ══ LEGEND edit ═══════════════════════════════════════════════ */
+function editLegendRow(kind){
+  const label = { check:'Green check label', x:'Red X label',
+                  well:'Red well label (abandoned/destroyed)',
+                  wellblue:'Blue well label (unmapped)' }[kind];
+  openTextModal(label, state.legend.lines[kind]).then(v=>{
+    if(v===null) return; const prev=snapshot(); state.legend.lines[kind]=v.trim()||state.legend.lines[kind];
+    pushUndo(prev); renderLegend();
+  });
+}
+function toggleLegend(){
+  if(!state.imgW){ toast('Load a site map first'); return; }
+  const prev=snapshot(); state.legend.show=!state.legend.show; pushUndo(prev);
+  renderLegend(); closeSheet('menu-backdrop');
+  toast(state.legend.show?'Legend shown — drag it to reposition, tap a row to edit':'Legend hidden');
+}
+
+/* ══ CALLOUT picker ════════════════════════════════════════════ */
+function openCalloutPicker(){
+  if(!state.imgW){ toast('Load a site map first'); return; }
+  const box = document.getElementById('callout-options'); box.innerHTML='';
+  CALLOUT_PRESETS.forEach(txt=>{
+    const b=document.createElement('button'); b.className='callout-opt';
+    b.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#ca8a04" stroke-width="2"><rect x="3" y="4" width="14" height="10" rx="2"/><path d="M8 14 6 20l7-6"/></svg>${txt}`;
+    b.onclick=()=>chooseCallout(txt); box.appendChild(b);
+  });
+  const c=document.createElement('button'); c.className='callout-opt custom';
+  c.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#2563eb" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Custom…`;
+  c.onclick=()=>chooseCalloutCustom(); box.appendChild(c);
+  openSheet('callout-backdrop');
+}
+function chooseCallout(txt){ pendingCalloutText=txt; closeSheet('callout-backdrop'); setTool('placeCallout'); }
+function chooseCalloutCustom(){
+  closeSheet('callout-backdrop');
+  openTextModal('Custom callout text','').then(v=>{
+    if(v===null || !v.trim()) { setTool('move'); return; }
+    pendingCalloutText=v.trim(); setTool('placeCallout');
+  });
+}
+
+/* ══ TEXT MODAL (promise) ══════════════════════════════════════ */
+let textModalResolver = null;
+function openTextModal(title, initial){
+  document.getElementById('text-modal-title').textContent = title;
+  const inp = document.getElementById('text-modal-input');
+  inp.value = initial || '';
+  openSheet('text-backdrop');
+  setTimeout(()=>inp.focus(), 60);
+  return new Promise(res=>{ textModalResolver = res; });
+}
+function resolveTextModal(val){ closeSheet('text-backdrop'); const r=textModalResolver; textModalResolver=null; if(r) r(val); }
+
+/* ══ EXPORT ════════════════════════════════════════════════════ */
+function exportPNG(){
+  if(!state.imgW){ toast('Load a site map first'); return; }
+  closeSheet('menu-backdrop');
+  const clone = stage.cloneNode(true);
+  clone.querySelector('#uiLayer').innerHTML='';           // strip selection handles
+  clone.querySelectorAll('[data-target]').forEach(n=>n.remove()); // strip callout target handles
+  clone.setAttribute('viewBox', `0 0 ${state.imgW} ${state.imgH}`);
+  clone.setAttribute('width', state.imgW); clone.setAttribute('height', state.imgH);
+  clone.removeAttribute('preserveAspectRatio');
+  const xml = new XMLSerializer().serializeToString(clone);
+  const svg64 = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+  const img = new Image();
+  img.onload = ()=>{
+    const c=document.createElement('canvas'); c.width=state.imgW; c.height=state.imgH;
+    const ctx=c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,c.width,c.height);
+    ctx.drawImage(img,0,0);
+    c.toBlob(b=>{ if(!b){ toast('Export failed'); return; }
+      downloadBlob(b, `field-markup-${stamp()}.png`); toast('PNG downloaded'); }, 'image/png');
+  };
+  img.onerror = ()=> toast('Export failed to render');
+  img.src = svg64;
+}
+function saveProject(){
+  if(!state.imgW){ toast('Load a site map first'); return; }
+  closeSheet('menu-backdrop');
+  const data = { v:1, imageUri:state.imageUri, imgW:state.imgW, imgH:state.imgH,
+                 items:state.items, legend:state.legend, nextId:state.nextId,
+                 iconScale:state.iconScale, labelScale:state.labelScale };
+  const blob = new Blob([JSON.stringify(data)], { type:'application/json' });
+  downloadBlob(blob, `field-markup-${stamp()}.json`); toast('Project saved');
+}
+async function handleProjectFile(e){
+  const file=e.target.files[0]; if(!file) return; e.target.value='';
+  try{
+    const txt = await file.text(); const d = JSON.parse(txt);
+    if(!d.imageUri) throw new Error('Not a valid project file');
+    state.items = d.items||[]; state.legend = d.legend||state.legend; state.nextId=d.nextId||1;
+    state.iconScale = (typeof d.iconScale==='number')?d.iconScale:1;
+    state.labelScale = (typeof d.labelScale==='number')?d.labelScale:1;
+    undoStack.length=0; redoStack.length=0; refreshUndoButtons(); selectedId=null;
+    loadImageUri(d.imageUri);
+    toast('Project loaded');
+  }catch(err){ toast(err.message||'Could not open project'); }
+}
+
+/* ══ CLEAR ═════════════════════════════════════════════════════ */
+let confirmAction=null;
+function confirmClear(){
+  if(!state.items.length && !state.legend.show){ toast('Nothing to clear'); closeSheet('menu-backdrop'); return; }
+  closeSheet('menu-backdrop');
+  document.getElementById('confirm-title').textContent='Clear all markups? The base map stays.';
+  confirmAction=()=>{ const prev=snapshot(); state.items=[]; selectedId=null; pushUndo(prev); renderAll(); toast('Markups cleared'); };
+  openSheet('confirm-backdrop');
+}
+document.getElementById('confirm-ok').onclick=()=>{ closeSheet('confirm-backdrop'); if(confirmAction){ confirmAction(); confirmAction=null; } };
+
+/* ══ UI plumbing ═══════════════════════════════════════════════ */
+function openMenu(){ refreshSizeReadouts(); openSheet('menu-backdrop'); }
+function openSheet(id){ document.getElementById(id).classList.add('open'); }
+function closeSheet(id){ document.getElementById(id).classList.remove('open'); }
+
+let hintTimer=null;
+function showHint(msg){ const h=document.getElementById('hint'); h.textContent=msg; h.classList.add('show');
+  clearTimeout(hintTimer); hintTimer=setTimeout(()=>h.classList.remove('show'), 2600); }
+let toastTimer=null;
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'), 2200); }
+
+function downloadBlob(blob, name){ const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000); }
+function stamp(){ const d=new Date(); const p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`; }
+function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
+
+/* prevent iOS long-press / context menu on the stage */
+stage.addEventListener('contextmenu', e=>e.preventDefault());
+window.addEventListener('resize', ()=>{ if(state.imgW) applyVB(); });
+
+/* init */
+buildRail();
+refreshUndoButtons();
+</script>
+</body>
+</html>
