@@ -402,7 +402,7 @@ document.getElementById('map-input').addEventListener('change', async e=>{
       if(!window.pdfjsLib){ await loadScript(PDF_CDN); window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER; }
       const pdf = await window.pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
       toast('Rendering PDF...');
-      loadImageUri(await renderPdfPage(pdf, 1, 2.5)); // Renders the first page dynamically
+      loadImageUri(await renderPdfPage(pdf, 1, 2.5));
     } else {
       const r = new FileReader(); r.onload=()=>loadImageUri(r.result); r.readAsDataURL(file);
     }
@@ -551,9 +551,44 @@ function getItem(id){ return state.items.find(i=>String(i.id)===String(id)); }
 function newId(){ return state.nextId++; }
 
 const pointers = new Map(); let gesture = null;
+function getPointers() { return Array.from(pointers.values()); }
+
 stage.addEventListener('pointerdown', e=>{
-  if(!state.imgW) return; stage.setPointerCapture(e.pointerId); pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
-  if(pointers.size>1) return;
+  if(!state.imgW) return; 
+  stage.setPointerCapture(e.pointerId); 
+  pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+
+  // Handle Multi-Touch (Two Finger Pan & Zoom)
+  if(pointers.size === 2) {
+    // If a drawing gesture was already happening, cancel it to switch to pinchPan
+    if(gesture && (gesture.mode === 'draw' || gesture.mode === 'zone')) {
+       const it = state.items[state.items.length-1];
+       if(it && it._live) { state.items.pop(); renderDraws(); }
+    }
+    
+    const pts = getPointers();
+    const initialDist = Math.max(1, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y));
+    const initialMidX = (pts[0].x + pts[1].x) / 2;
+    const initialMidY = (pts[0].y + pts[1].y) / 2;
+    const r = stage.getBoundingClientRect();
+    
+    // Map initial screen midpoint to current world coordinates
+    const worldMidX = vb.x + (initialMidX - r.left) / r.width * vb.w;
+    const worldMidY = vb.y + (initialMidY - r.top) / r.height * vb.h;
+    
+    gesture = {
+       mode: 'pinchPan',
+       initialDist,
+       initialVb: { ...vb },
+       worldMidX,
+       worldMidY,
+       rect: r
+    };
+    return;
+  }
+  
+  if(pointers.size > 2) return;
+
   const w = toWorld(e.clientX, e.clientY);
   const base = { id:e.pointerId, startX:e.clientX, startY:e.clientY, lastX:e.clientX, lastY:e.clientY, moved:false, startWorld:w };
 
@@ -561,8 +596,6 @@ stage.addEventListener('pointerdown', e=>{
   if(tool==='zone'){ gesture={...base, mode:'zone'}; state.items.push({id:newId(), type:'zone', x1:w.x, y1:w.y, x2:w.x, y2:w.y, _live:true}); gesture.pre=snapshot(); renderDraws(); return; }
   if(tool==='erase'){ eraseAt(e.clientX, e.clientY); gesture={...base, mode:'erase', pre:snapshot()}; return; }
   
-  // This seamless fallback check verifies if we clicked an existing well/item. 
-  // It instantly allows click-and-drag dragging, bypassing the need to actively toggle tools.
   const hit = hitItem(e.target);
   if(hit){ 
     gesture={...base, mode:'drag', item:hit, ix:hit.x, iy:hit.y, pre:snapshot()}; 
@@ -579,6 +612,34 @@ stage.addEventListener('pointerdown', e=>{
 });
 
 stage.addEventListener('pointermove', e=>{
+  if(pointers.has(e.pointerId)) pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+
+  // Calculate ongoing two-finger pinch pan
+  if(gesture && gesture.mode === 'pinchPan' && pointers.size === 2) {
+     const pts = getPointers();
+     const currDist = Math.max(1, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y));
+     const currMidX = (pts[0].x + pts[1].x) / 2;
+     const currMidY = (pts[0].y + pts[1].y) / 2;
+     
+     const scale = currDist / gesture.initialDist;
+     let nw = gesture.initialVb.w / scale;
+     let nh = gesture.initialVb.h / scale;
+     
+     // Enforce zoom boundaries
+     const maxW = state.imgW * 10;
+     const minW = state.imgW * 0.05;
+     if(nw > maxW) { nw = maxW; nh = maxW * (gesture.initialVb.h / gesture.initialVb.w); }
+     if(nw < minW) { nw = minW; nh = minW * (gesture.initialVb.h / gesture.initialVb.w); }
+     
+     // Center scale onto the midpoint and apply the pan offset in one step
+     const nx = gesture.worldMidX - (currMidX - gesture.rect.left) / gesture.rect.width * nw;
+     const ny = gesture.worldMidY - (currMidY - gesture.rect.top) / gesture.rect.height * nh;
+     
+     vb.x = nx; vb.y = ny; vb.w = nw; vb.h = nh;
+     applyVB();
+     return;
+  }
+
   if(!gesture || e.pointerId!==gesture.id) return;
   const dx=e.clientX-gesture.startX, dy=e.clientY-gesture.startY; if(Math.hypot(dx,dy)>7) gesture.moved=true;
   if(gesture.mode==='draw'){ gesture.pts.push([toWorld(e.clientX, e.clientY).x, toWorld(e.clientX, e.clientY).y]); renderDraws(); }
@@ -595,10 +656,31 @@ stage.addEventListener('pointermove', e=>{
 });
 
 stage.addEventListener('pointerup', e=>{
-  pointers.delete(e.pointerId); if(!gesture || e.pointerId!==gesture.id) return; const g=gesture; gesture=null;
+  pointers.delete(e.pointerId); 
+  
+  if(gesture && gesture.mode === 'pinchPan') { 
+     if(pointers.size < 2) gesture = null; // Exit multi-touch
+     return; 
+  }
+  
+  if(!gesture || e.pointerId!==gesture.id) return; 
+  
+  const g=gesture; gesture=null;
   if(g.mode==='draw'||g.mode==='zone'){ const it=state.items[state.items.length-1]; delete it._live; pushUndo(g.pre||snapshot()); }
   if(g.mode==='drag' && g.moved) pushUndo(g.pre);
   if(g.mode==='tapAction' && !g.moved) doPlacement(g.startWorld);
+});
+
+stage.addEventListener('pointercancel', e=>{
+  pointers.delete(e.pointerId);
+  if(gesture && gesture.mode === 'pinchPan') { 
+     if(pointers.size < 2) gesture = null; 
+     return; 
+  }
+  if(gesture && gesture.id === e.pointerId) {
+     if(gesture.mode==='draw'||gesture.mode==='zone'){ const it=state.items[state.items.length-1]; if(it._live){ state.items.pop(); renderDraws(); } }
+     gesture = null;
+  }
 });
 
 function doPlacement(w){
